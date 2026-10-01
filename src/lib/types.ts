@@ -1,0 +1,556 @@
+// Shared domain types for the LUMIÈRE admin console
+
+export type Route =
+  | 'overview'
+  | 'workforce'
+  | 'dashboard'
+  | 'registry'
+  | 'logs'
+  | 'security-audit'
+  | 'rbac'
+  | 'damage'
+  | 'replenishment'
+  // Warehouse supervisor console
+  | 'inventory'
+  | 'warehouse-logs'
+  | 'crew'
+  | 'deployments'
+  | 'dispatch'
+  | 'vendors'
+  // Event planner console
+  | 'event-detail'
+  | 'canvas'
+  | 'canvas-workspace'
+  // Ground crew field app
+  | 'field-ops'
+  // Warehouse mobile workspaces
+  | 'warehouse-lead'
+  | 'warehouse-member'
+  | 'manning'
+  | 'production-manager'
+  | 'inventory-officer'
+  // Project Manager console
+  | 'project-manager'
+
+/* ---------- Procurement / Replenishment ---------- */
+
+// Lifecycle state of a stocked asset relative to its replenishment threshold.
+export type DeficitStatus =
+  | 'Received'
+  | 'Not Purchased'
+  | 'In Procurement'
+
+export interface ProcurementItem {
+  id: string
+  assetId: string
+  name: string
+  category: string
+  currentStock: number
+  threshold: number
+  unit: string
+  status: DeficitStatus
+  // Populated once a reorder requisition has been routed.
+  reorderQty?: number
+  poRef?: string
+  etaHours?: number
+  supplier?: string
+  image?: string
+}
+
+// A supplier/contact a reorder requisition can be routed to.
+export interface Vendor {
+  id: string
+  name: string
+  contactName: string
+  email: string
+  phone: string
+  specialty: string
+  leadTimeHours: number
+  rating: number
+  priceTier: 'Economy' | 'Standard' | 'Premium'
+  preferred: boolean
+  // Category keywords used to recommend a vendor for a given item.
+  matches: string[]
+}
+
+export interface ReorderDraft {
+  itemId: string
+  reorderQty: number
+  note: string
+  vendorId: string
+}
+
+/* ---------- Staff / Access Control ---------- */
+
+/* ---------- Canonical Ground Crew Subroles ---------- */
+
+export const GROUND_CREW_SUBROLES = [
+  'Warehouse',
+  'Field',
+  'Inventory',
+  'Production',
+  'EventAdmin',
+] as const
+
+export type GroundCrewSubRole = (typeof GROUND_CREW_SUBROLES)[number]
+
+export function isGroundCrewSubRole(role?: string): role is GroundCrewSubRole {
+  if (!role) return false
+  const canonical = GROUND_CREW_SUBROLES as readonly string[]
+  return canonical.includes(role)
+}
+
+export function normalizeGroundCrewSubRole(rawRole?: string): GroundCrewSubRole | undefined {
+  if (!rawRole) return undefined
+  const cleaned = rawRole.trim().replace(/\s+/g, '')
+  if (cleaned.toLowerCase() === 'eventadmin') return 'EventAdmin'
+  if (cleaned.toLowerCase() === 'warehouse') return 'Warehouse'
+  if (cleaned.toLowerCase() === 'field') return 'Field'
+  if (cleaned.toLowerCase() === 'inventory') return 'Inventory'
+  if (cleaned.toLowerCase() === 'production') return 'Production'
+  if (cleaned.toLowerCase().includes('field')) return 'Field'
+  if (cleaned.toLowerCase().includes('warehouse')) return 'Warehouse'
+  if (cleaned.toLowerCase().includes('production')) return 'Production'
+  if (cleaned.toLowerCase().includes('inventory')) return 'Inventory'
+  return undefined
+}
+
+export const SELECTABLE_STAFF_ROLES = [
+  'Admin',
+  'Executive',
+  'Executive Lite',
+  'Project Manager',
+  'Project Manager Lite',
+  'Warehouse Manager',
+  'Warehouse Associate',
+  'Event Planner',
+  'Ground Crew',
+] as const
+
+export type SelectableStaffRole = (typeof SELECTABLE_STAFF_ROLES)[number]
+
+export const STAFF_ROLES = [
+  'Admin',
+  'Executive',
+  'Executive Lite',
+  'Project Manager',
+  'Project Manager Lite',
+  'Warehouse Operations Manager',
+  'Warehouse Manager',
+  'Warehouse Associate',
+  'Inventory Officer',
+  'Manning Officer',
+  'Production Manager',
+  'Purchasing Officer',
+  'Event Planner',
+  'Ground Crew',
+  'Event Admin',
+  'Warehouse Lead',
+  'Warehouse Member',
+] as const
+
+export type StaffRole = (typeof STAFF_ROLES)[number] | 'Unassigned' | (string & {})
+
+export type SessionStatus =
+  | 'Active Session'
+  | 'Offline Session'
+  | 'Suspended'
+
+// A directory entry is either a full portal account (can authenticate) or an
+// employee record (on-call / seasonal worker with no standing login).
+export type RecordKind = 'full-account' | 'employee-record'
+
+// The lifecycle state surfaced in Workforce Management, distinct from the live
+// session state. Locked is derived from an open account-locked request.
+export type AccountStatus = 'Active' | 'Pending' | 'Locked' | 'Suspended'
+
+export type EmploymentType = 'On-call' | 'Seasonal'
+
+export interface Staff {
+  id: string
+  employeeId: string
+  surname: string
+  firstName: string
+  middleName?: string
+  fullName?: string
+  email: string
+  contact: string
+  role: StaffRole
+  subRole?: string
+  sessionStatus: SessionStatus
+  lastAccess: string
+  // Date the staff member was onboarded, used to group hires in the User
+  // Growth Summary modal. Display format matches lastAccess (e.g. 'Feb 03, 2026').
+  dateAdded?: string
+  // Fields below are optional so existing screens/records keep type-checking;
+  // Workforce Management normalizes any missing value to a 'full-account' default.
+  recordKind?: RecordKind
+  accountStatus?: AccountStatus
+  employmentType?: EmploymentType
+  // Present (unclaimed) only for a Pending full account awaiting first login.
+  tempPassword?: string
+  // Employee records can be archived and reactivated later.
+  archived?: boolean
+}
+
+export interface NewStaffDraft {
+  employeeId: string
+  surname: string
+  firstName: string
+  middleName: string
+  email: string
+  contact: string
+  role: StaffRole | ''
+  subRole?: string
+  tempPassword?: string
+}
+
+// Employee record has no login credentials — no email, password, or role prompt.
+export interface NewEmployeeRecordDraft {
+  firstName: string
+  surname: string
+  contact: string
+  employmentType: EmploymentType
+}
+
+/* ---------- Events ---------- */
+
+export type ExperienceTier =
+  | 'Tier-1 VIP (Bespoke Logistics)'
+  | 'Tier-2 Premium'
+  | 'Tier-3 Standard'
+
+export type EventStatus =
+  | 'Initialized'
+  | 'In Production'
+  | 'Completed'
+  | 'On Hold'
+  | 'Reserved'
+  | 'Cancelled'
+  | 'Settled'
+
+export interface PortalEvent {
+  id: string
+  refId: string
+  title: string
+  client: string
+  tier: ExperienceTier
+  venue: string
+  targetDate: string
+  installationStart: string
+  installationEnd: string
+  eventStart?: string
+  eventEnd?: string
+  ingressDate?: string
+  ingressTime?: string
+  fullStop?: string
+  returnDate?: string
+  geoClass?: string
+  budget: number
+  status: EventStatus
+  moodPlan: string
+  projectManagerId?: string
+  projectManagerName?: string
+}
+
+/* ---------- Dispatch & Batches ---------- */
+
+export type DispatchBatchStatus =
+  | 'Planned'
+  | 'Loaded'
+  | 'In Transit'
+  | 'Stalled In Transit'
+  | 'Delivered'
+  | 'Returned'
+
+export interface NewEventDraft {
+  title: string
+  client: string
+  venue: string
+  targetDate: string
+  installationStart: string
+  installationEnd: string
+  moodPlan: string
+  geoClass?: string
+  ingressDate?: string
+  ingressTime?: string
+  fullStop?: string
+  returnDate?: string
+  projectManagerId?: string
+}
+
+/* ---------- Account / User Actions ---------- */
+
+// Pending account requests surfaced on the Overview and in Access Control.
+export type UserActionType = 'forgot-password' | 'request-password' | 'account-locked' | 'access-request'
+
+export type UserActionStatus = 'pending' | 'completed'
+
+export interface UserAction {
+  id: string
+  type: UserActionType
+  user: string
+  email?: string
+  status: UserActionStatus
+  accountType?: StaffRole
+}
+
+/* ---------- Event Updates ---------- */
+
+export type EventUpdateStatus = 'Scheduled' | 'Action Required' | 'Completed'
+
+export interface EventUpdate {
+  id: string
+  title: string
+  status: EventUpdateStatus
+}
+
+/* ---------- Damage Validation ---------- */
+
+// Verdict state for a post-event logistics damage exception.
+// 'Pending Second Sign-off' and the two audit resolutions ('Repair' /
+// 'Write-off') only apply to exceptions that were held for audit due to
+// missing photographic evidence — resolving out of that hold requires two
+// distinct Executive sign-offs.
+export type DamageVerdict =
+  | 'Pending Verdict'
+  | 'Validated'
+  | 'Dismissed'
+  | 'Held for Audit'
+  | 'Pending Second Sign-off'
+  | 'Repair'
+  | 'Write-off'
+
+export type DamageCustodyMode =
+  | 'genuine-dual-custody'
+  | 'standing-self-validation'
+  | 'admin-enabled-override'
+
+export interface SubRoleEmergencyUnblockMetadata {
+  originatedFromEmergency: boolean
+  emergencyReason: string
+  unblockedByAdminEmail: string
+  unblockScope: 'instance' | 'permanent'
+  madePermanentAt?: string
+  permanentAcknowledged?: boolean
+}
+
+export interface DamageSelfValidationRecord {
+  validatedByEmail: string
+  validatedByName: string
+  womRole: string
+  pinVerified: boolean
+  justification: string
+  timestamp: string
+  custodyMode: DamageCustodyMode
+  convertedViaEmergency?: boolean
+}
+
+export interface DamageSignOff {
+  staffEmail: string
+  staffName: string
+  womRole?: string
+  verdict: 'Repair' | 'Write-off' | 'Validated' | 'Dismissed'
+  note: string
+  timestamp: string
+}
+
+export type HavaDeclarationState = 'Reviewable' | 'Finalized'
+export type HavaEvidenceStatus = 'Temporally Valid' | 'Temporally Invalid' | 'Unverifiable'
+
+export interface DamageReportAmendment {
+  id: string
+  fromVersion: number
+  toVersion: number
+  reason: string
+  previousValues: string
+  correctedValues: string
+  correctedBy: string
+  correctedAt: string
+}
+
+export interface DamageException {
+  id: string
+  logId: string
+  eventId?: string
+  assetId?: string
+  boundEvent: string
+  reportingOfficer: string
+  officerRole: string
+  assetName: string
+  assetSku: string
+  damageType: string
+  damagedQuantity?: number
+  photoUrl?: string
+  imageUrl: string
+  images?: string[]
+  gps: string
+  capturedAt: string
+  exifVerified: boolean
+  evidenceStatus?: HavaEvidenceStatus | string
+  isTemporallyValid?: boolean
+  estimatedCost: number
+  notes: string
+  status: DamageVerdict
+  noPhotographicEvidence?: boolean
+  firstSignOff?: DamageSignOff
+  secondSignOff?: DamageSignOff
+  custodyMode?: DamageCustodyMode
+  unblockMetadata?: SubRoleEmergencyUnblockMetadata
+  selfValidation?: DamageSelfValidationRecord
+  // HAVA fields — authoritative evidence & lifecycle data
+  sha256Hash?: string
+  exifMetadata?: string
+  gpsCoordinates?: string
+  declarationState?: HavaDeclarationState
+  reviewDeadlineAt?: string
+  finalizedAt?: string
+  lastEditedAt?: string
+  isEditable?: boolean
+  version?: number
+  captureTimestamp?: string
+  evidenceProcessedAt?: string
+  evidenceDerivationError?: string
+  captureSource?: string
+  operationalCheckpoint?: string
+  idempotencyKey?: string
+  submittedBy?: string
+  submittedAt?: string
+  amendments?: DamageReportAmendment[]
+}
+
+/* ---------- Inventory / Asset Registry ---------- */
+
+export const ASSET_CATEGORIES = [
+  'Event Assets',
+  'Production Assets',
+  'Stockroom Assets',
+  'Rental Assets',
+  'Administrative Assets',
+] as const
+
+export type AssetCategory = (typeof ASSET_CATEGORIES)[number]
+
+export type StockStatus =
+  | 'Available'
+  | 'Low Stock'
+  | 'Critical Deficit'
+  | 'Order Placed'
+  | 'Depleted'
+  | 'In Maintenance'
+
+export interface InventoryItem {
+  id: string
+  assetId: string
+  name: string
+  category: string
+  image: string
+  stock: number
+  capacity: number
+  status: StockStatus
+  updated: string
+  // Extended detail fields for the asset profile view
+  description?: string
+  dateAdded?: string
+  store?: string
+  representative?: string
+  contact?: string
+  height?: string
+  width?: string
+  weight?: string
+  fragile?: boolean
+  unit?: string
+  cost?: number
+  costPerUnit?: number
+}
+
+/* ---------- Activity Logs ---------- */
+
+export interface ActivityLog {
+  id: string
+  timestamp: string
+  date: string
+  logId: string
+  account: string
+  initiatorRole: string
+  action: string
+  detail: string
+  ip: string
+  status: string
+}
+
+/* ---------- Partial Egress & Post-Event Accountability ---------- */
+
+export type PartialEgressState = 'Pending Completion' | 'Completed'
+export type PartialEgressItemType = 'Asset Return Accountability' | 'HAVA Declaration Finalization'
+export type PartialEgressItemStatus = 'Outstanding' | 'Resolved' | 'Exception Resolved'
+export type PartialEgressEscalationStatus = 'None' | 'Escalated'
+
+export interface EventEgressItemResponse {
+  id: string
+  itemType: PartialEgressItemType | string
+  checkpoint: string
+  assetId?: string | null
+  damageReportId?: string | null
+  status: PartialEgressItemStatus | string
+  createdAt: string
+  resolvedAt?: string | null
+  resolvedBy?: string | null
+  resolutionMethod?: string | null
+  resolutionReason?: string | null
+  resolvedAfterDeadline: boolean
+  version: number
+}
+
+export interface EventEgressResponse {
+  id: string
+  eventId: string
+  state: PartialEgressState | string
+  egressedAt: string
+  initiatedBy: string
+  initiationNote?: string | null
+  completionWindowMinutes: number
+  completionDeadlineAt: string
+  completedAt?: string | null
+  completedAfterDeadline: boolean
+  isOverdue: boolean
+  escalationStatus: PartialEgressEscalationStatus | string
+  escalatedAt?: string | null
+  escalatedBy?: string | null
+  escalationReason?: string | null
+  version: number
+  isDuplicate: boolean
+  outstandingItems: EventEgressItemResponse[]
+  items: EventEgressItemResponse[]
+}
+
+export interface PostEgressPolicyResponse {
+  completionWindowMinutes: number
+  version: number
+  updatedAt: string
+  updatedBy?: string | null
+}
+
+export interface InitiatePartialEgressRequest {
+  idempotencyKey: string
+  note?: string | null
+}
+
+export interface CompleteEgressItemRequest {
+  expectedEgressVersion: number
+  expectedItemVersion: number
+}
+
+export interface ExceptionResolveEgressItemRequest extends CompleteEgressItemRequest {
+  reason: string
+}
+
+export interface EscalatePartialEgressRequest {
+  expectedVersion: number
+  reason: string
+}
+
+export interface UpdatePostEgressPolicyRequest {
+  completionWindowMinutes: number
+  expectedVersion: number
+}
